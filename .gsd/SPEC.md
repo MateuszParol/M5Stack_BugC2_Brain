@@ -29,24 +29,26 @@ Autonomiczny robot mobilny oparty na platformie M5Stack BugC2, sterowany przez M
 | Baza robota | **M5Stack BugC2** | Silniki DC (L9110S), bateria 700mAh, STM32F030, I2C 0x38 |
 | Czujnik odległości | **ToF4M** (VL53L1X) | Wykrywanie przeszkód, I2C 0x29 |
 | Kamera AI | **AtomS3R-CAM** | Wizja komputerowa (ESP32-S3, GC0308, 0.3MP) |
-| Pilot (opcja) | **M5Stack Cardputer Advance** | Sterowanie zdalne (ESP-NOW / WiFi) |
+| Pilot (opcja) | **M5Stack Cardputer Advance** | Sterowanie zdalne (WiFi) |
+| Hub | **Grove Hub** | Rozdzielenie magistrali I2C na wiele urządzeń |
 
 ### Połączenia
 ```
 M5StickC Plus 2
   └── Grove Port (GPIO21=SDA, GPIO22=SCL, 5V, GND)
-       ├── BugC2 Motor Driver (I2C 0x38)
-       ├── ToF4M Sensor (I2C 0x29)
-       └── AtomS3R-CAM (UART/I2C via Grove Hub)
+       └── Grove Hub
+            ├── BugC2 Motor Driver (I2C 0x38)
+            ├── ToF4M Sensor (I2C 0x29)
+            └── AtomS3R-CAM (I2C slave / UART via Grove)
 ```
 
-> **UWAGA**: Ponieważ M5StickC Plus 2 ma tylko **jeden port Grove**, potrzebny będzie Grove Hub do podłączenia wielu urządzeń I2C. Alternatywnie AtomS3R-CAM może komunikować się przez WiFi (ESP-NOW) z M5StickC Plus 2.
+> **Wszystkie urządzenia podłączone kablem Grove** przez Grove Hub. AtomS3R-CAM działa jako I2C slave na magistrali współdzielonej z BugC2 i ToF4M.
 
 ## Users
 Właściciel robota (użytkownik hobbystyczny) — steruje i monitoruje robota bezpośrednio lub zdalnie.
 
 ## Constraints
-- **Hardware**: Jeden port Grove na M5StickC Plus 2 — wymaga Grove Hub lub komunikacji WiFi z kamerą
+- **Hardware**: Jeden port Grove na M5StickC Plus 2 — rozwiązany przez Grove Hub (wszystko kablem)
 - **Pamięć**: ESP32-PICO-V3-02 ma 2MB PSRAM — modele AI muszą być lekkie
 - **Kamera**: GC0308 to 0.3MP — ograniczona rozdzielczość obrazu
 - **Zasilanie**: Bateria BugC2 700mAh — optymalizacja zużycia energii
