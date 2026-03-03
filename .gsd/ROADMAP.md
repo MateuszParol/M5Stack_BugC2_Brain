@@ -19,7 +19,7 @@
 **Requirements**: REQ-01 (motor control), REQ-02 (project structure)
 
 ### Phase 2: Collision Detection — ToF4M Integration
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Zintegrować czujnik ToF4M, zaimplementować logikę wykrywania przeszkód z progami odległości (15cm stop, 30cm zwolnij).
 **Deliverable**: Robot odczytuje odległość i wyświetla ją, reaguje na przeszkody
 **Requirements**: REQ-03 (ToF sensor), REQ-04 (collision logic)
