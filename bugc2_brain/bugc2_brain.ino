@@ -114,7 +114,7 @@ void setup() {
     display.clear();
     display.update(currentMode, batteryVoltage, currentDistance, 
                    cameraConnected, visionSensor.getLastDetectionName(), remoteCtrl.getIPAddress());
-    display.drawMessage("Ready. IP: " + remoteCtrl.getIPAddress());
+    display.drawMessage(String("Ready. IP: " + remoteCtrl.getIPAddress()).c_str());
     
     Serial.println("[Setup] Complete!");
     Serial.printf("[Mode] Current: %s\n", modeToString(currentMode));
@@ -163,7 +163,7 @@ void loop() {
     if (visionOverride) {
         motors.stop();
         display.drawMessage("VISION STOP!");
-        if (navigator.isActive() && navigator.getState() == AutoNavigator::NAV_FORWARD) {
+        if (navigator.isActive() && navigator.getState() == NAV_FORWARD) {
             // Wymuś uniki nawigatorowi (w przyszłości wizja powinna sterować nim wprost)
             motors.backward(SPEED_NORMAL);
             delay(300);

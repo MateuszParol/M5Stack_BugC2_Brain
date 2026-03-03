@@ -8,6 +8,7 @@
  */
 
 #include "collision_detector.h"
+#include <M5StickCPlus2.h>
 
 void CollisionDetector::begin(ToFSensor* tof, MotorDriver* motors) {
     _tof = tof;
