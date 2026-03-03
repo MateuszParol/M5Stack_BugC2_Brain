@@ -2,7 +2,7 @@
  * bugc2_brain.ino — M5Stack BugC2 Brain
  * 
  * Główny firmware robota BugC2 działający na M5StickC Plus 2.
- * Phase 2: Collision Detection — ToF4M + system stref kolizji.
+ * Phase 3: Autonomous Driving — losowa eksploracja z omijaniem przeszkód.
  * 
  * Hardware:
  * - M5StickC Plus 2 (ESP32-PICO-V3-02)
@@ -14,7 +14,7 @@
  * - BtnA: Przełączanie trybów / Start testu silników (długie naciśnięcie)
  * - BtnB: Emergency Stop
  * 
- * Wersja: 1.1.0-alpha (Phase 2)
+ * Wersja: 1.2.0-alpha (Phase 3)
  */
 
 #include <M5StickCPlus2.h>
@@ -26,6 +26,7 @@
 #include "i2c_scanner.h"
 #include "tof_sensor.h"
 #include "collision_detector.h"
+#include "auto_navigator.h"
 
 // ============================================================
 // Global Objects
@@ -35,6 +36,7 @@ DisplayManager display;
 I2CScanner i2cScanner;
 ToFSensor tofSensor;
 CollisionDetector collisionDetector;
+AutoNavigator navigator;
 
 // ============================================================
 // State
@@ -108,6 +110,9 @@ void setup() {
     
     // Inicjalizacja detektora kolizji
     collisionDetector.begin(&tofSensor, &motors);
+    
+    // Inicjalizacja nawigatora (Phase 3)
+    navigator.begin(&motors, &collisionDetector);
     
     // Sprawdź kamerę (Phase 5 — na razie)
     cameraConnected = i2cScanner.isDevicePresent(CAM_ADDR);
@@ -283,6 +288,9 @@ void loop() {
         Serial.printf("[Mode] Switched to: %s\n", modeToString(currentMode));
         display.drawMessage(modeToString(currentMode));
         
+        // Aktywuj/deaktywuj nawigację
+        navigator.setActive(currentMode == MODE_AUTONOMOUS);
+        
         // LED wskazujący tryb (tylko jeśli nie w trybie kolizji)
         if (!collisionDetector.isCollisionActive()) {
             switch (currentMode) {
@@ -309,7 +317,14 @@ void loop() {
         motors.setLED(0, 30, 0, 0);
         motors.setLED(1, 30, 0, 0);
         testRunning = false;
-        display.drawMessage("EMERGENCY STOP!");
+        navigator.setActive(false);
+        currentMode = MODE_MANUAL;
+        display.drawMessage("EMERGENCY STOP (MANUAL)");
+    }
+    
+    // ---- Autonomous Navigator Update ----
+    if (navigator.isActive() && !testRunning) {
+        navigator.update();
     }
     
     // ---- Motor Test ----
@@ -329,6 +344,14 @@ void loop() {
     if (now - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
         display.update(currentMode, batteryVoltage, currentDistance,
                        cameraConnected, NULL);
+                       
+        // Pokaż stan nawigatora (nadpisz wiadomości jeśli aktywny)
+        if (navigator.isActive()) {
+            char navMsg[32];
+            snprintf(navMsg, sizeof(navMsg), "AUTO: %s", navigator.stateToString(navigator.getState()));
+            display.drawMessage(navMsg);
+        }
+        
         lastDisplayUpdate = now;
     }
     

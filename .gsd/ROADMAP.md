@@ -25,7 +25,7 @@
 **Requirements**: REQ-03 (ToF sensor), REQ-04 (collision logic)
 
 ### Phase 3: Autonomous Driving — Random Exploration
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Zaimplementować tryb autonomicznej jazdy z losową eksploracją i omijaniem przeszkód na podstawie danych ToF.
 **Deliverable**: Robot samodzielnie jeździ i omija przeszkody
 **Requirements**: REQ-05 (autonomous mode), REQ-06 (obstacle avoidance)
