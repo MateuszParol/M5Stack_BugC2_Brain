@@ -13,7 +13,7 @@
 ## Phases
 
 ### Phase 1: Foundation — Hardware Abstraction & Motor Control
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Uruchomić BugC2 — kontrola silników, odczyt baterii, LED. Stworzyć bazową strukturę projektu Arduino z modularną architekturą.
 **Deliverable**: Robot rusza, skręca, zatrzymuje się na komendę z kodu
 **Requirements**: REQ-01 (motor control), REQ-02 (project structure)
