@@ -37,7 +37,7 @@
 **Requirements**: REQ-07 (driving modes), REQ-08 (remote control), REQ-09 (mode switching)
 
 ### Phase 5: Camera AI — AtomS3R-CAM Vision System
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Zaprogramować AtomS3R-CAM (osobny firmware ESP32-S3) z modelem TFLite do wykrywania przeszkód wizyjnych. Komunikacja ESP-NOW z kontrolerem głównym.
 **Deliverable**: Kamera wykrywa obiekty i wpływa na decyzje jazdy
 **Requirements**: REQ-10 (camera AI), REQ-11 (ESP-NOW comms), REQ-12 (vision integration)

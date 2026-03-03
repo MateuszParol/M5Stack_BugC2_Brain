@@ -29,6 +29,7 @@
 #include "collision_detector.h"
 #include "auto_navigator.h"
 #include "remote_controller.h"
+#include "vision_sensor.h"
 
 // ============================================================
 // Global Objects
@@ -40,6 +41,7 @@ ToFSensor tofSensor;
 CollisionDetector collisionDetector;
 AutoNavigator navigator;
 RemoteController remoteCtrl;
+VisionSensor visionSensor;
 
 // ============================================================
 // State
@@ -120,8 +122,9 @@ void setup() {
     // Inicjalizacja Remote Controller (Phase 4)
     remoteCtrl.begin();
     
-    // Sprawdź kamerę (Phase 5 — na razie)
-    cameraConnected = i2cScanner.isDevicePresent(CAM_ADDR);
+    // Sprawdź i zainicjalizuj kamerę (Phase 5)
+    visionSensor.begin();
+    cameraConnected = visionSensor.isConnected();
     
     // Odczyt baterii
     batteryVoltage = motors.getBatteryVoltage();
@@ -130,7 +133,7 @@ void setup() {
     // Wyświetl pełny HUD
     display.clear();
     display.update(currentMode, batteryVoltage, currentDistance, 
-                   cameraConnected, NULL, remoteCtrl.getIPAddress());
+                   cameraConnected, visionSensor.getLastDetectionName(), remoteCtrl.getIPAddress());
     display.drawMessage("Ready. IP: " + remoteCtrl.getIPAddress());
     
     Serial.println("[Setup] Complete!");
@@ -271,6 +274,10 @@ void loop() {
     // Obsługa zapytań WiFi i WebServera
     remoteCtrl.handleClient();
     
+    // Obsługa systemu wizyjnego (I2C)
+    visionSensor.update();
+    cameraConnected = visionSensor.isConnected();
+    
     // ---- Odczyt ToF co TOF_READ_INTERVAL ----
     if (tofSensor.isInitialized() && now - lastToFRead >= TOF_READ_INTERVAL) {
         currentDistance = tofSensor.readDistance();
@@ -281,11 +288,29 @@ void loop() {
         
         // Serial log co 500ms (nie zaśmiecaj)
         if (now - lastSerialLog >= 500) {
-            Serial.printf("[ToF] %dcm | Zone: %s | Override: %s\n",
+            Serial.printf("[ToF] %dcm | Zone: %s | Override: %s | Vision: %s\n",
                           currentDistance,
                           CollisionDetector::zoneToString(zone),
-                          collisionDetector.shouldOverrideMotors() ? "YES" : "no");
+                          collisionDetector.shouldOverrideMotors() ? "YES" : "no",
+                          visionSensor.getLastDetectionName());
             lastSerialLog = now;
+        }
+    }
+    
+    // Zatrzymaj natychmiast, jeśli system wizyjny zgłasza przeszkodę
+    // w trybie półautonomicznym lub autonomicznym.
+    // Aby to zrobić czysto, dodajemy prosty if i override:
+    bool visionOverride = visionSensor.isObstacleDetected() && currentMode != MODE_MANUAL;
+    if (visionOverride && !testRunning) {
+        motors.stop();
+        display.drawMessage("VISION STOP!");
+        if (navigator.isActive() && navigator.getState() == AutoNavigator::NAV_FORWARD) {
+            // Wymuś uniki nawigatorowi (w przyszłości wizja powinna sterować nim wprost)
+            motors.backward(SPEED_NORMAL);
+            delay(300);
+            motors.spinLeft(SPEED_NORMAL);
+            delay(400);
+            motors.stop();
         }
     }
     
@@ -352,11 +377,11 @@ void loop() {
     
     String reqCmd = remoteCtrl.getRequestedCommand();
     if (reqCmd != "" && !testRunning && currentMode != MODE_AUTONOMOUS) {
-        bool blockForward = (currentMode == MODE_SEMI_AUTO && collisionDetector.shouldOverrideMotors());
+        bool blockForward = (currentMode == MODE_SEMI_AUTO && (collisionDetector.shouldOverrideMotors() || visionSensor.isObstacleDetected()));
         
         if (reqCmd == "S" || (reqCmd == "F" && blockForward)) {
             motors.stop();
-            if (reqCmd == "F" && blockForward) Serial.println("[Nav] WebCmd F blocked by CollisionDetector");
+            if (reqCmd == "F" && blockForward) Serial.println("[Nav] WebCmd F blocked by Collision/Vision");
         } else if (reqCmd == "F") {
             motors.forward(SPEED_NORMAL);
         } else if (reqCmd == "B") {
@@ -390,7 +415,7 @@ void loop() {
     // Aktualizacja LCD
     if (now - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
         display.update(currentMode, batteryVoltage, currentDistance,
-                       cameraConnected, NULL, remoteCtrl.getIPAddress());
+                       cameraConnected, visionSensor.getLastDetectionName(), remoteCtrl.getIPAddress());
                        
         // Pokaż stan nawigatora (nadpisz wiadomości jeśli aktywny)
         if (navigator.isActive()) {
