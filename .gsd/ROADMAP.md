@@ -31,7 +31,7 @@
 **Requirements**: REQ-05 (autonomous mode), REQ-06 (obstacle avoidance)
 
 ### Phase 4: Driving Modes — Semi-Auto & Manual + Remote Control
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Dodać tryby półautonomiczny i manualny, implementacja sterowania zdalnego przez WiFi/ESP-NOW, przełączanie trybów przyciskiem i zdalnie.
 **Deliverable**: 3 tryby jazdy z płynnym przełączaniem + aplikacja/pilot
 **Requirements**: REQ-07 (driving modes), REQ-08 (remote control), REQ-09 (mode switching)

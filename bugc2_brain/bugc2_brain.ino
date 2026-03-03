@@ -2,7 +2,7 @@
  * bugc2_brain.ino — M5Stack BugC2 Brain
  * 
  * Główny firmware robota BugC2 działający na M5StickC Plus 2.
- * Phase 3: Autonomous Driving — losowa eksploracja z omijaniem przeszkód.
+ * Phase 4: Remote Control — Sterowanie po WiFi i WebServer.
  * 
  * Hardware:
  * - M5StickC Plus 2 (ESP32-PICO-V3-02)
@@ -13,8 +13,9 @@
  * Sterowanie:
  * - BtnA: Przełączanie trybów / Start testu silników (długie naciśnięcie)
  * - BtnB: Emergency Stop
+ * - WiFi (192.168.4.1): Panel sterowania na telefonie
  * 
- * Wersja: 1.2.0-alpha (Phase 3)
+ * Wersja: 1.3.0-alpha (Phase 4)
  */
 
 #include <M5StickCPlus2.h>
@@ -27,6 +28,7 @@
 #include "tof_sensor.h"
 #include "collision_detector.h"
 #include "auto_navigator.h"
+#include "remote_controller.h"
 
 // ============================================================
 // Global Objects
@@ -37,6 +39,7 @@ I2CScanner i2cScanner;
 ToFSensor tofSensor;
 CollisionDetector collisionDetector;
 AutoNavigator navigator;
+RemoteController remoteCtrl;
 
 // ============================================================
 // State
@@ -114,6 +117,9 @@ void setup() {
     // Inicjalizacja nawigatora (Phase 3)
     navigator.begin(&motors, &collisionDetector);
     
+    // Inicjalizacja Remote Controller (Phase 4)
+    remoteCtrl.begin();
+    
     // Sprawdź kamerę (Phase 5 — na razie)
     cameraConnected = i2cScanner.isDevicePresent(CAM_ADDR);
     
@@ -124,8 +130,8 @@ void setup() {
     // Wyświetl pełny HUD
     display.clear();
     display.update(currentMode, batteryVoltage, currentDistance, 
-                   cameraConnected, NULL);
-    display.drawMessage("BtnA:Mode  Long:Test  B:Stop");
+                   cameraConnected, NULL, remoteCtrl.getIPAddress());
+    display.drawMessage("Ready. IP: " + remoteCtrl.getIPAddress());
     
     Serial.println("[Setup] Complete!");
     Serial.printf("[Mode] Current: %s\n", modeToString(currentMode));
@@ -262,6 +268,9 @@ void loop() {
     M5.update();  // Odczyt przycisków
     unsigned long now = millis();
     
+    // Obsługa zapytań WiFi i WebServera
+    remoteCtrl.handleClient();
+    
     // ---- Odczyt ToF co TOF_READ_INTERVAL ----
     if (tofSensor.isInitialized() && now - lastToFRead >= TOF_READ_INTERVAL) {
         currentDistance = tofSensor.readDistance();
@@ -322,6 +331,44 @@ void loop() {
         display.drawMessage("EMERGENCY STOP (MANUAL)");
     }
     
+    // ---- Obsługa poleceń z WiFi ----
+    int requestedMode = remoteCtrl.getRequestedMode();
+    if (requestedMode >= 0 && requestedMode <= 2 && !testRunning) {
+        currentMode = (DrivingMode)requestedMode;
+        Serial.printf("[Mode] Switched via WiFi to: %s\n", modeToString(currentMode));
+        display.drawMessage(modeToString(currentMode));
+        
+        navigator.setActive(currentMode == MODE_AUTONOMOUS);
+        
+        if (!collisionDetector.isCollisionActive()) {
+            switch (currentMode) {
+                case MODE_MANUAL:     motors.setLED(0, 0, 0, 30); motors.setLED(1, 0, 0, 30); break;
+                case MODE_SEMI_AUTO:  motors.setLED(0, 30, 30, 0); motors.setLED(1, 30, 30, 0); break;
+                case MODE_AUTONOMOUS: motors.setLED(0, 0, 30, 0); motors.setLED(1, 0, 30, 0); break;
+                default: break;
+            }
+        }
+    }
+    
+    String reqCmd = remoteCtrl.getRequestedCommand();
+    if (reqCmd != "" && !testRunning && currentMode != MODE_AUTONOMOUS) {
+        bool blockForward = (currentMode == MODE_SEMI_AUTO && collisionDetector.shouldOverrideMotors());
+        
+        if (reqCmd == "S" || (reqCmd == "F" && blockForward)) {
+            motors.stop();
+            if (reqCmd == "F" && blockForward) Serial.println("[Nav] WebCmd F blocked by CollisionDetector");
+        } else if (reqCmd == "F") {
+            motors.forward(SPEED_NORMAL);
+        } else if (reqCmd == "B") {
+            motors.backward(SPEED_NORMAL);
+        } else if (reqCmd == "L") {
+            motors.turnLeft(SPEED_NORMAL);
+        } else if (reqCmd == "R") {
+            motors.turnRight(SPEED_NORMAL);
+        }
+    }
+    remoteCtrl.clearRequests();
+    
     // ---- Autonomous Navigator Update ----
     if (navigator.isActive() && !testRunning) {
         navigator.update();
@@ -343,7 +390,7 @@ void loop() {
     // Aktualizacja LCD
     if (now - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
         display.update(currentMode, batteryVoltage, currentDistance,
-                       cameraConnected, NULL);
+                       cameraConnected, NULL, remoteCtrl.getIPAddress());
                        
         // Pokaż stan nawigatora (nadpisz wiadomości jeśli aktywny)
         if (navigator.isActive()) {

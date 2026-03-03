@@ -84,4 +84,11 @@
 #define MOTOR_UPDATE_INTERVAL    50    // Motor command rate
 #define SERIAL_BAUD_RATE         115200
 
+// ============================================================
+// WiFi & Web Server (Phase 4)
+// ============================================================
+#define WIFI_AP_SSID "BugC2_Robot"
+#define WIFI_AP_PASS "12345678" // min 8 znaków dla WPA2
+#define WEB_SERVER_PORT 80
+
 #endif // CONFIG_H

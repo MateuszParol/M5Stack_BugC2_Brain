@@ -50,6 +50,12 @@ public:
     void drawCameraStatus(bool connected, const char* lastDetection);
 
     /**
+     * Narysuj status WiFi.
+     * @param ipAddress IP address in AP mode
+     */
+    void drawWiFiStatus(String ipAddress);
+
+    /**
      * Wyświetl wyniki skanowania I2C na ekranie.
      * @param devices  Tablica znalezionych adresów
      * @param count    Ilość znalezionych urządzeń
@@ -65,13 +71,14 @@ public:
      * Pełna aktualizacja HUD — wywoływana co DISPLAY_UPDATE_INTERVAL ms.
      */
     void update(DrivingMode mode, float battery, int distance, 
-                bool camConnected, const char* camDetection);
+                bool camConnected, const char* camDetection, String wifiIP);
 
 private:
     DrivingMode _lastMode = MODE_MANUAL;
     float _lastBattery = 0.0f;
     int _lastDistance = -1;
     bool _lastCamConnected = false;
+    String _lastWifiIP = "";
     bool _needsFullRedraw = true;
 
     /**

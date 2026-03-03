@@ -7,10 +7,9 @@
  * │──────────────────────────────────────│
  * │ Dist: 45 cm  ████████████████░░░░░░ │  <- Distance Bar (y: 25-50)
  * │──────────────────────────────────────│
- * │ CAM: Connected                      │  <- Camera Status (y: 55-75)
- * │ Last: person (87%)                  │
+ * │ CAM: --          WiFi: 192.168.4.1  │  <- Camera/WiFi Status (y: 55-75)
  * │──────────────────────────────────────│
- * │ I2C: 0x38 ✓  0x29 ✓  0x40 ✗       │  <- I2C Status (y: 80-100)
+ * │ I2C: 0x38 ✓  0x29 ✓  0x40 ✗         │  <- I2C Status (y: 80-100)
  * │──────────────────────────────────────│
  * │ [message area]                      │  <- Messages (y: 105-130)
  * └──────────────────────────────────────┘
@@ -131,7 +130,7 @@ void DisplayManager::drawDistanceBar(int distanceCm) {
 }
 
 void DisplayManager::drawCameraStatus(bool connected, const char* lastDetection) {
-    M5.Lcd.fillRect(0, CAM_STATUS_Y, 240, 20, TFT_BLACK);
+    M5.Lcd.fillRect(0, CAM_STATUS_Y, 120, 20, TFT_BLACK); // Tylko lewa połowa
     
     M5.Lcd.setTextSize(1);
     M5.Lcd.setCursor(BAR_X, CAM_STATUS_Y + 2);
@@ -139,13 +138,23 @@ void DisplayManager::drawCameraStatus(bool connected, const char* lastDetection)
     if (connected) {
         M5.Lcd.setTextColor(TFT_GREEN, TFT_BLACK);
         M5.Lcd.print("CAM: OK");
-        if (lastDetection != NULL) {
-            M5.Lcd.setTextColor(TFT_CYAN, TFT_BLACK);
-            M5.Lcd.printf("  %s", lastDetection);
-        }
     } else {
         M5.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
         M5.Lcd.print("CAM: --");
+    }
+}
+
+void DisplayManager::drawWiFiStatus(String ipAddress) {
+    M5.Lcd.fillRect(120, CAM_STATUS_Y, 120, 20, TFT_BLACK); // Tylko prawa połowa
+    M5.Lcd.setTextSize(1);
+    M5.Lcd.setCursor(120, CAM_STATUS_Y + 2);
+    
+    if (ipAddress.length() > 0) {
+        M5.Lcd.setTextColor(TFT_CYAN, TFT_BLACK);
+        M5.Lcd.printf("AP: %s", ipAddress.c_str());
+    } else {
+        M5.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+        M5.Lcd.print("AP: OFF");
     }
     
     M5.Lcd.drawLine(0, CAM_STATUS_Y + 20, 240, CAM_STATUS_Y + 20, TFT_DARKGREY);
@@ -195,12 +204,13 @@ void DisplayManager::drawMessage(const char* msg) {
 }
 
 void DisplayManager::update(DrivingMode mode, float battery, int distance,
-                            bool camConnected, const char* camDetection) {
+                            bool camConnected, const char* camDetection, String wifiIP) {
     // Optymalizacja: rysuj tylko zmienione elementy
     bool modeChanged = (mode != _lastMode) || _needsFullRedraw;
     bool batteryChanged = (abs(battery - _lastBattery) > 0.05f) || _needsFullRedraw;
     bool distanceChanged = (distance != _lastDistance) || _needsFullRedraw;
     bool camChanged = (camConnected != _lastCamConnected) || _needsFullRedraw;
+    bool wifiChanged = (wifiIP != _lastWifiIP) || _needsFullRedraw;
     
     if (modeChanged || batteryChanged) {
         drawStatusBar(mode, battery);
@@ -210,8 +220,9 @@ void DisplayManager::update(DrivingMode mode, float battery, int distance,
         drawDistanceBar(distance);
     }
     
-    if (camChanged) {
+    if (camChanged || wifiChanged) {
         drawCameraStatus(camConnected, camDetection);
+        drawWiFiStatus(wifiIP);
     }
     
     // Zapamiętaj stan
@@ -219,6 +230,7 @@ void DisplayManager::update(DrivingMode mode, float battery, int distance,
     _lastBattery = battery;
     _lastDistance = distance;
     _lastCamConnected = camConnected;
+    _lastWifiIP = wifiIP;
     _needsFullRedraw = false;
 }
 
