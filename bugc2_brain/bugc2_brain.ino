@@ -2,19 +2,19 @@
  * bugc2_brain.ino — M5Stack BugC2 Brain
  * 
  * Główny firmware robota BugC2 działający na M5StickC Plus 2.
- * Phase 1: Foundation — kontrola silników, LCD HUD, diagnostyka I2C.
+ * Phase 2: Collision Detection — ToF4M + system stref kolizji.
  * 
  * Hardware:
  * - M5StickC Plus 2 (ESP32-PICO-V3-02)
  * - BugC2 Motor Driver (I2C 0x38)
- * - ToF4M Distance Sensor (I2C 0x29) — Phase 2
+ * - ToF4M Distance Sensor (I2C 0x29)
  * - AtomS3R-CAM AI (I2C slave) — Phase 5
  * 
  * Sterowanie:
  * - BtnA: Przełączanie trybów / Start testu silników (długie naciśnięcie)
  * - BtnB: Emergency Stop
  * 
- * Wersja: 1.0.0-alpha (Phase 1)
+ * Wersja: 1.1.0-alpha (Phase 2)
  */
 
 #include <M5StickCPlus2.h>
@@ -24,6 +24,8 @@
 #include "display_manager.h"
 #include "driving_mode.h"
 #include "i2c_scanner.h"
+#include "tof_sensor.h"
+#include "collision_detector.h"
 
 // ============================================================
 // Global Objects
@@ -31,16 +33,20 @@
 MotorDriver motors;
 DisplayManager display;
 I2CScanner i2cScanner;
+ToFSensor tofSensor;
+CollisionDetector collisionDetector;
 
 // ============================================================
 // State
 // ============================================================
 DrivingMode currentMode = MODE_MANUAL;
 float batteryVoltage = 0.0f;
-int currentDistance = -1;          // -1 = brak czujnika (Phase 2)
+int currentDistance = -1;
 bool cameraConnected = false;     // Phase 5
 unsigned long lastDisplayUpdate = 0;
 unsigned long lastBatteryRead = 0;
+unsigned long lastToFRead = 0;
+unsigned long lastSerialLog = 0;
 
 // Motor Test State
 enum TestPhase {
@@ -72,16 +78,16 @@ void setup() {
     
     Serial.begin(SERIAL_BAUD_RATE);
     Serial.println("========================================");
-    Serial.println("  BugC2 Brain v1.0.0-alpha (Phase 1)");
+    Serial.println("  BugC2 Brain v1.1.0-alpha (Phase 2)");
     Serial.println("========================================");
     
     // Inicjalizacja LCD — splash screen
     display.begin();
-    delay(1500);  // Pokaż splash screen
+    delay(1500);
     
     // Inicjalizacja I2C (Grove Port)
     Wire.begin(SDA_PIN, SCL_PIN);
-    Wire.setClock(100000);  // 100kHz — bezpieczna prędkość
+    Wire.setClock(100000);
     Serial.println("[I2C] Initialized on SDA=" + String(SDA_PIN) + " SCL=" + String(SCL_PIN));
     
     // Skanowanie I2C
@@ -91,11 +97,19 @@ void setup() {
     // Wyświetl wyniki na LCD
     display.clear();
     display.drawI2CStatus(i2cScanner.getFoundDevices(), deviceCount);
+    delay(2000);
     
     // Inicjalizacja silników
     motors.begin();
     
-    // Sprawdź kamerę (Phase 5 — na razie zawsze false)
+    // Inicjalizacja czujnika ToF4M
+    bool tofOk = tofSensor.begin();
+    Serial.printf("[ToF] Status: %s\n", tofOk ? "OK" : "NOT AVAILABLE");
+    
+    // Inicjalizacja detektora kolizji
+    collisionDetector.begin(&tofSensor, &motors);
+    
+    // Sprawdź kamerę (Phase 5 — na razie)
     cameraConnected = i2cScanner.isDevicePresent(CAM_ADDR);
     
     // Odczyt baterii
@@ -103,12 +117,14 @@ void setup() {
     lastBatteryRead = millis();
     
     // Wyświetl pełny HUD
+    display.clear();
     display.update(currentMode, batteryVoltage, currentDistance, 
                    cameraConnected, NULL);
     display.drawMessage("BtnA:Mode  Long:Test  B:Stop");
     
     Serial.println("[Setup] Complete!");
     Serial.printf("[Mode] Current: %s\n", modeToString(currentMode));
+    Serial.printf("[ToF] Sensor: %s\n", tofSensor.isInitialized() ? "ACTIVE" : "INACTIVE");
     Serial.println("[Controls] BtnA=Mode, LongPress=MotorTest, BtnB=Stop");
 }
 
@@ -117,6 +133,15 @@ void setup() {
 // ============================================================
 void runMotorTest() {
     unsigned long elapsed = millis() - testTimer;
+    
+    // Bezpieczeństwo: jeśli kolizja w trybie SEMI_AUTO/AUTO — przerwij test
+    if (currentMode != MODE_MANUAL && collisionDetector.shouldOverrideMotors()) {
+        Serial.println("[Test] ABORTED — collision override active!");
+        motors.stop();
+        testRunning = false;
+        display.drawMessage("TEST ABORTED: OBSTACLE!");
+        return;
+    }
     
     switch (currentTest) {
         case TEST_FORWARD:
@@ -232,6 +257,24 @@ void loop() {
     M5.update();  // Odczyt przycisków
     unsigned long now = millis();
     
+    // ---- Odczyt ToF co TOF_READ_INTERVAL ----
+    if (tofSensor.isInitialized() && now - lastToFRead >= TOF_READ_INTERVAL) {
+        currentDistance = tofSensor.readDistance();
+        lastToFRead = now;
+        
+        // Aktualizuj detektor kolizji
+        CollisionZone zone = collisionDetector.update(currentDistance, currentMode);
+        
+        // Serial log co 500ms (nie zaśmiecaj)
+        if (now - lastSerialLog >= 500) {
+            Serial.printf("[ToF] %dcm | Zone: %s | Override: %s\n",
+                          currentDistance,
+                          CollisionDetector::zoneToString(zone),
+                          collisionDetector.shouldOverrideMotors() ? "YES" : "no");
+            lastSerialLog = now;
+        }
+    }
+    
     // ---- Obsługa przycisków ----
     
     // BtnA: krótkie naciśnięcie = zmiana trybu
@@ -240,12 +283,14 @@ void loop() {
         Serial.printf("[Mode] Switched to: %s\n", modeToString(currentMode));
         display.drawMessage(modeToString(currentMode));
         
-        // LED wskazujący tryb
-        switch (currentMode) {
-            case MODE_MANUAL:     motors.setLED(0, 0, 0, 30); motors.setLED(1, 0, 0, 30); break;
-            case MODE_SEMI_AUTO:  motors.setLED(0, 30, 30, 0); motors.setLED(1, 30, 30, 0); break;
-            case MODE_AUTONOMOUS: motors.setLED(0, 0, 30, 0); motors.setLED(1, 0, 30, 0); break;
-            default: break;
+        // LED wskazujący tryb (tylko jeśli nie w trybie kolizji)
+        if (!collisionDetector.isCollisionActive()) {
+            switch (currentMode) {
+                case MODE_MANUAL:     motors.setLED(0, 0, 0, 30); motors.setLED(1, 0, 0, 30); break;
+                case MODE_SEMI_AUTO:  motors.setLED(0, 30, 30, 0); motors.setLED(1, 30, 30, 0); break;
+                case MODE_AUTONOMOUS: motors.setLED(0, 0, 30, 0); motors.setLED(1, 0, 30, 0); break;
+                default: break;
+            }
         }
     }
     
